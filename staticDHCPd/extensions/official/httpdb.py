@@ -115,8 +115,8 @@ class _HTTPLogic(object):
         if self._post:
             data = json.dumps(dict(
              {'mac': str(mac)},
-             **self._additional_info)
-            )
+             **self._additional_info
+            ))
 
             headers.update({
              'Content-Length': str(len(data)),
@@ -191,8 +191,6 @@ class _HTTPLogic(object):
             #packet_or_mac is mac
             result = self._lookupMAC(packet_or_mac)
             if result and isinstance(result, (list,tuple)) and len(result) == 1:
-                _logger.debug("$"*150)
-                _logger.debug(result[0].__dict__)
                 return result[0]
             else:
                 return None
