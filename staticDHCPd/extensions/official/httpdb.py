@@ -93,6 +93,8 @@ class _HTTPLogic(object):
             self._uri = config.X_HTTPDB_URI
         except AttributeError:
             raise AttributeError("X_HTTPDB_URI must be specified in conf.py")
+        self._post = getattr(config, 'X_HTTPDB_POST', False)
+
         self._headers = getattr(config, 'X_HTTPDB_HEADERS', {})
         additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
         string_list = ['&%s=%s' % (key, value) for key, value in additional_info.iteritems()]
@@ -100,7 +102,6 @@ class _HTTPLogic(object):
         self._name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
         self._lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
         self._serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
-        #self._post = getattr(config, 'X_HTTPDB_POST', True)
 
     def _lookupMAC(self, mac):
         """
@@ -112,32 +113,48 @@ class _HTTPLogic(object):
         headers = self._headers.copy()
 
         #You can usually ignore this if-block, though you could strip out whichever method you don't use
-        url = "%(uri)s?mac=%(mac)s%(add_info)s" % {
-         'uri': self._uri,
-         'mac': str(mac).replace(':', '%3A'),
-         'add_info': self._additional_info
-        }
+        if self._post:
+            data = json.dumps(dict(
+             {'mac': str(mac)},
+             **self._additional_info)
+            )
 
-        request = urllib2.Request(
-         url,
-         headers=headers,
-        )
+            headers.update({
+             'Content-Length': str(len(data)),
+             'Content-Type': 'application/json',
+            })
+
+            url = self._uri
+
+            request = urllib2.Request(
+             self._uri, data=data,
+             headers=headers,
+            )
+        else:
+            url = "%(uri)s?mac=%(mac)s%(add_info)s" % {
+             'uri': self._uri,
+             'mac': str(mac).replace(':', '%3A'),
+             'add_info': self._additional_info
+            }
+
+            request = urllib2.Request(
+             url,
+             headers=headers,
+            )
 
         _logger.debug("Sending request to '%(uri)s' for '%(mac)s'... %(url)s" % {
          'uri': self._uri,
          'mac': str(mac),
          'url': url
         })
+
         try:
             response = urllib2.urlopen(request)
             _logger.debug("MAC response received from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
              'mac': str(mac),
             })
-            result = response.read()
-            _logger.debug('*'*150)
-            _logger.debug(result)
-            results = json.loads(result)
+            results = json.loads(response.read())
 
             if not results: #The server sent back 'null' or an empty object
                 _logger.debug("Unknown MAC response from '%(uri)s' for '%(mac)s'" % {
