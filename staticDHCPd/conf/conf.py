@@ -7,7 +7,10 @@
 
 
 # Whether to daemonise on startup (you don't want this during initial setup)
-DAEMON = True
+DAEMON = False
+DEBUG = True
+LOG_FILE_SEVERITY = 'DEBUG'
+LOG_CONSOLE_SEVERITY = 'DEBUG'
 
 #WARNING: The default UID and GID are those of root. THIS IS NOT GOOD!
 #If testing, set them to your id, which you can find using `id` in a terminal.
@@ -19,21 +22,22 @@ UID = 0
 GID = 0
 
 #The IP of the interface to use for DHCP traffic
-DHCP_SERVER_IP = '192.168.1.1'
+DHCP_SERVER_IP = '10.244.36.60'
 
 #The database-engine to use
 #For details, see the configuration guide in the documentation.
-DATABASE_ENGINE = None
+import httpdb
+DATABASE_ENGINE = httpdb.HTTPDatabase #or httpdb.HTTPCachingDatabase
 
 X_HTTPDB_ADDITIONAL_INFO = {'datacenter':'ANDOVERQA'}
 
-HTTPDB_ENDPOINT = 'app-stage'
-HTTPDB_PORT = 8200
-X_HTTPDB_URI = 'https://%s:%d' % (HTTPDB_ENDPOINT, HTTPDB_PORT)
+X_HTTPDB_SERVICE_ADDRESS = 'localhost'
+X_HTTPDB_SERVICE_PORT = 8200
+X_HTTPDB_URI = 'http://%s:%d/netconfig/' % (X_HTTPDB_SERVICE_ADDRESS, X_HTTPDB_SERVICE_PORT)
 
-from extensions.httpdb import HTTPDatabase
-handleUnknownMAC = HTTPDatabase().retrieveDefinition
+X_HTTPDB_DEFAULT_NAME_SERVERS = '8.8.8.8,8.8.4.4'
+X_HTTPDB_LEASE_TIME =43200
 
 #test = requests.get('http://app-stage:8200/netconfig?datacenter=ANDOVERQA&mac=00:50:56:92:78:46')
-#subnet = cidr
-#subnet_mask = netmask
+
+# handleUnknownMAC = httpdb._handle_unknown_mac

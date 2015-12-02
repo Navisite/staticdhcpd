@@ -27,7 +27,7 @@ To use this module, make the following changes to conf.py:
         #at a time; successive requests will block; DEFAULTS TO (effectively)
         #INFINITE
         X_HTTPDB_CONCURRENCY_LIMIT = 10
-        
+
 For a list of all parameters you may define, see below.
 
 If concurrent connections to your HTTP server should be limited, use
@@ -60,20 +60,6 @@ def _parse_server_response(json_data):
     }
     ...into a Definition-object.
     """
-    return Definition(
-        ip=json_data['ip'], lease_time=json_data['lease_time'],
-        subnet=json_data['subnet'], serial=json_data['serial'],
-        hostname=json_data.get('hostname'),
-        gateways=json_data.get('gateway'),
-        subnet_mask=json_data.get('subnet_mask'),
-        broadcast_address=json_data.get('broadcast_address'),
-        domain_name=json_data.get('domain_name'),
-        domain_name_servers=json_data.get('domain_name_servers'),
-        ntp_servers=json_data.get('ntp_servers'),
-        extra=json_data.get('extra'),
-    )
-
-def _parse_server_response_navi(json_data):
     result = Definition(
         ip=json_data['ip'], lease_time=json_data['lease_time'],
         subnet=json_data['cidr'], serial=json_data['serial'],
@@ -86,17 +72,15 @@ def _parse_server_response_navi(json_data):
         ntp_servers=json_data.get('ntp_servers'),
         extra=json_data.get('extra'),
     )
-    if not result['broadcast_address']:
-        result['broadcast_address'] = str(netaddr.IPNetwork(result['subnet']).broadcast)
-    
-    if not result['domain_name_servers']:
-        result['domain_name_servers'] = conf.DEFAULT_NAME_SERVERS
 
-    if not result['lease_time']:
-        result['lease_time'] = conf.DEFAULT_LEASE_TIME
+    if not result['domain_name_servers'] and hasattr(config, 'DEFAULT_NAME_SERVERS', None):
+        result['domain_name_servers'] = config.X_HTTPDB_DEFAULT_NAME_SERVERS
+
+    if not result['lease_time'] and hasattr(config, 'DEFAULT_LEASE_TIME', None):
+        result['lease_time'] = config.X_HTTPDB_DEFAULT_LEASE_TIME
 
     return result
-    
+
 #Do not touch anything below this line
 ################################################################################
 import json
@@ -112,7 +96,7 @@ _logger = logging.getLogger("extension.httpdb")
 class _HTTPLogic(object):
     def __init__(self):
         from staticdhcpdlib import config
-        
+
         try:
             self._uri = config.X_HTTPDB_URI
         except AttributeError:
@@ -129,23 +113,25 @@ class _HTTPLogic(object):
         study when customising for your site.
         """
         global _parse_server_response
-        
         #If you need to generate per-request headers, add them here
         headers = self._headers.copy()
-        
-        #You can usually ignore this if-block, though you could strip out whichever method you don't use 
+
+        #You can usually ignore this if-block, though you could strip out whichever method you don't use
+        url = "%(uri)s?mac=%(mac)s%(add_info)s" % {
+         'uri': self._uri,
+         'mac': str(mac).replace(':', '%3A'),
+         'add_info': self._additional_info
+        }
+
         request = urllib2.Request(
-            "%(uri)s?mac=%(mac)s%(add_info)s" % {
-             'uri': self._uri,
-             'mac': str(mac).replace(':', '%3A'),
-             'add_info': self._additional_info
-            },
-            headers=headers,
-         )
-            
-        _logger.debug("Sending request to '%(uri)s' for '%(mac)s'..." % {
+         url,
+         headers=headers,
+        )
+
+        _logger.debug("Sending request to '%(uri)s' for '%(mac)s'... %(url)s" % {
          'uri': self._uri,
          'mac': str(mac),
+         'url': url
         })
         try:
             response = urllib2.urlopen(request)
@@ -154,16 +140,16 @@ class _HTTPLogic(object):
              'mac': str(mac),
             })
             results = json.loads(response.read())
-            
+
             if not results: #The server sent back 'null' or an empty object
                 _logger.debug("Unknown MAC response from '%(uri)s' for '%(mac)s'" % {
                  'uri': self._uri,
                  'mac': str(mac),
                 })
                 return None
-                
-            definitions = [_parse_server_response_navi(result) for result in results]
-            
+
+            definitions = [_parse_server_response(result) for result in results]
+
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
              'mac': str(mac),
@@ -177,33 +163,30 @@ class _HTTPLogic(object):
             })
             raise
 
-    def _retrieveDefinition(packet_or_mac, packet_type=None, mac=None, ip=None,
+    def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None, ip=None,
                             giaddr=None, pxe=None, pxe_options=None):
         # TODO - update this function to return None if additional info is not avail
         #        to check against subnet - also add verification of subnet
         if all(x is None for x in [packet_type, mac, ip, giaddr, pxe, pxe_options]):
             #packet_or_mac is mac
             result = self._lookupMAC(packet_or_mac)
-            if result and len(result) == 1:
+            if result and isinstance(result, (list,tuple)) and len(result) == 1:
                 return result[0]
             else:
                 return None
         else:
             return None
-        
-            
+
+
 class HTTPDatabase(Database, _HTTPLogic):
     def __init__(self):
         _HTTPLogic.__init__(self)
-        
-    def lookupMAC(self, mac):
-        return self._retrieveDefinition(mac)
 
-    def retrieveDefinition(packet, packet_type, mac, ip,
-                           giaddr, pxe, pxe_options):
-        return self._retrieveDefinition(packet, packet_type, mac, ip,
-                                        giaddr, pxe, pxe_options)
-        
+    def lookupMAC(self, packet_or_mac, packet_type=None, mac=None, ip=None,
+                  giaddr=None, pxe=None, pxe_options=None):
+        return self._retrieveDefinition(packet_or_mac, packet_type, mac, ip,
+                                        giaddr, pxe_options)
+
 class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
     def __init__(self):
         if hasattr(config, 'X_HTTPDB_CONCURRENCY_LIMIT'):
@@ -211,4 +194,8 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
         else:
             CachingDatabase.__init__(self)
         _HTTPLogic.__init__(self)
-        
+
+# def _handle_unknown_mac(packet, packet_type, mac, ip,
+#                            giaddr, pxe_options):
+#     HTTPDatabase().lookupMAC(packet, packet_type, mac, ip,
+#                                       giaddr, pxe_options)
