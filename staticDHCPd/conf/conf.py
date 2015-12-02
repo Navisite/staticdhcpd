@@ -24,6 +24,8 @@ GID = 0
 #The IP of the interface to use for DHCP traffic
 DHCP_SERVER_IP = '10.244.36.60'
 
+DHCP_RESPONSE_INTERFACE = 'vboxnet1'
+
 #The database-engine to use
 #For details, see the configuration guide in the documentation.
 import httpdb
@@ -33,10 +35,11 @@ X_HTTPDB_ADDITIONAL_INFO = {'datacenter':'ANDOVERQA'}
 
 X_HTTPDB_SERVICE_ADDRESS = 'localhost'
 X_HTTPDB_SERVICE_PORT = 8200
-X_HTTPDB_URI = 'http://%s:%d/netconfig/' % (X_HTTPDB_SERVICE_ADDRESS, X_HTTPDB_SERVICE_PORT)
+X_HTTPDB_URI = 'http://%s:%d/dhcpconfig/' % (X_HTTPDB_SERVICE_ADDRESS, X_HTTPDB_SERVICE_PORT)
 
 X_HTTPDB_DEFAULT_NAME_SERVERS = '8.8.8.8,8.8.4.4'
-X_HTTPDB_LEASE_TIME =43200
+X_HTTPDB_DEFAULT_LEASE_TIME = 43200
+X_HTTPDB_DEFAULT_SERIAL = 0
 
 #test = requests.get('http://app-stage:8200/netconfig?datacenter=ANDOVERQA&mac=00:50:56:92:78:46')
 

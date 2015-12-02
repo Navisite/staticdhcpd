@@ -60,26 +60,18 @@ def _parse_server_response(json_data):
     }
     ...into a Definition-object.
     """
-    result = Definition(
+    return Definition(
         ip=json_data['ip'], lease_time=json_data['lease_time'],
-        subnet=json_data['cidr'], serial=json_data['serial'],
+        subnet=json_data['subnet'], serial=json_data['serial'],
         hostname=json_data.get('hostname'),
         gateways=json_data.get('gateway'),
-        subnet_mask=json_data.get('netmask'),
+        subnet_mask=json_data.get('subnet_mask'),
         broadcast_address=json_data.get('broadcast_address'),
         domain_name=json_data.get('domain_name'),
         domain_name_servers=json_data.get('domain_name_servers'),
         ntp_servers=json_data.get('ntp_servers'),
         extra=json_data.get('extra'),
     )
-
-    if not result['domain_name_servers'] and hasattr(config, 'DEFAULT_NAME_SERVERS', None):
-        result['domain_name_servers'] = config.X_HTTPDB_DEFAULT_NAME_SERVERS
-
-    if not result['lease_time'] and hasattr(config, 'DEFAULT_LEASE_TIME', None):
-        result['lease_time'] = config.X_HTTPDB_DEFAULT_LEASE_TIME
-
-    return result
 
 #Do not touch anything below this line
 ################################################################################
@@ -105,6 +97,9 @@ class _HTTPLogic(object):
         additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
         string_list = ['&%s=%s' % (key, value) for key, value in additional_info.iteritems()]
         self._additional_info = ''.join(string_list)
+        self._name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
+        self._lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
+        self._serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
         #self._post = getattr(config, 'X_HTTPDB_POST', True)
 
     def _lookupMAC(self, mac):
@@ -139,7 +134,10 @@ class _HTTPLogic(object):
              'uri': self._uri,
              'mac': str(mac),
             })
-            results = json.loads(response.read())
+            result = response.read()
+            _logger.debug('*'*150)
+            _logger.debug(result)
+            results = json.loads(result)
 
             if not results: #The server sent back 'null' or an empty object
                 _logger.debug("Unknown MAC response from '%(uri)s' for '%(mac)s'" % {
@@ -148,7 +146,7 @@ class _HTTPLogic(object):
                 })
                 return None
 
-            definitions = [_parse_server_response(result) for result in results]
+            definitions = [self._parse_server_response(result) for result in results]
 
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
@@ -163,6 +161,15 @@ class _HTTPLogic(object):
             })
             raise
 
+    def _parse_server_response(self, json_data):
+        json_data['domain_name_servers'] = json_data.get('domain_name_servers') or self._name_servers
+
+        json_data['lease_time'] = json_data.get('lease_time') or self._lease_time
+
+        json_data['serial'] = json_data.get('serial') or self._serial
+
+        return _parse_server_response(json_data)
+
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None, ip=None,
                             giaddr=None, pxe=None, pxe_options=None):
         # TODO - update this function to return None if additional info is not avail
@@ -171,6 +178,8 @@ class _HTTPLogic(object):
             #packet_or_mac is mac
             result = self._lookupMAC(packet_or_mac)
             if result and isinstance(result, (list,tuple)) and len(result) == 1:
+                _logger.debug("$"*150)
+                _logger.debug(result[0].__dict__)
                 return result[0]
             else:
                 return None
