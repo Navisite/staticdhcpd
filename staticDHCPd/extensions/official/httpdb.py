@@ -93,9 +93,8 @@ class _HTTPLogic(object):
             self._uri = config.X_HTTPDB_URI
         except AttributeError:
             raise AttributeError("X_HTTPDB_URI must be specified in conf.py")
-        self._post = getattr(config, 'X_HTTPDB_POST', False)
-
         self._headers = getattr(config, 'X_HTTPDB_HEADERS', {})
+        self._post = getattr(config, 'X_HTTPDB_POST', False)
         additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
         string_list = ['&%s=%s' % (key, value) for key, value in additional_info.iteritems()]
         self._additional_info = ''.join(string_list)
@@ -180,11 +179,8 @@ class _HTTPLogic(object):
 
     def _parse_server_response(self, json_data):
         json_data['domain_name_servers'] = json_data.get('domain_name_servers') or self._name_servers
-
         json_data['lease_time'] = json_data.get('lease_time') or self._lease_time
-
         json_data['serial'] = json_data.get('serial') or self._serial
-
         return _parse_server_response(json_data)
 
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None, ip=None,
