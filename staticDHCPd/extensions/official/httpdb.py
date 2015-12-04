@@ -197,7 +197,7 @@ class _HTTPLogic(object):
         return _parse_server_response(json_data)
 
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
-                            ip=None, giaddr=None, pxe=None, pxe_options=None):
+                            ip=None, giaddr=None, pxe_options=None):
         """
         Retrieve the definition matching the input arguments
 
@@ -216,8 +216,7 @@ class _HTTPLogic(object):
             definition; None if no "lease" is available.
         """
 
-        if all(x is None for x in [packet_type, mac, ip, giaddr, pxe,
-                                   pxe_options]):
+        if all(x is None for x in [packet_type, mac, ip, giaddr, pxe_options]):
             #packet_or_mac is a MAC address here
             results = self._lookupMAC(packet_or_mac)
             if isinstance(results, (list,tuple)) and len(results) == 1:
