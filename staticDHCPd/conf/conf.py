@@ -21,10 +21,11 @@ UID = 0
 #The GID this server will use after initial setup
 GID = 0
 
+ALLOW_DHCP_RELAYS = True
 #The IP of the interface to use for DHCP traffic
-DHCP_SERVER_IP = '10.244.36.60'
+DHCP_SERVER_IP = '10.244.36.61'
 
-DHCP_RESPONSE_INTERFACE = 'vboxnet1'
+DHCP_RESPONSE_INTERFACE = 'vboxnet0'
 
 #The database-engine to use
 #For details, see the configuration guide in the documentation.
@@ -33,7 +34,7 @@ DATABASE_ENGINE = httpdb.HTTPDatabase #or httpdb.HTTPCachingDatabase
 
 X_HTTPDB_ADDITIONAL_INFO = {'datacenter':'ANDOVERQA'}
 
-X_HTTPDB_SERVICE_ADDRESS = 'localhost'
+X_HTTPDB_SERVICE_ADDRESS = '10.244.36.60'
 X_HTTPDB_SERVICE_PORT = 8200
 X_HTTPDB_URI = 'http://%s:%d/dhcpconfig/' % (X_HTTPDB_SERVICE_ADDRESS, X_HTTPDB_SERVICE_PORT)
 
@@ -43,4 +44,4 @@ X_HTTPDB_DEFAULT_SERIAL = 0
 
 #test = requests.get('http://app-stage:8200/netconfig?datacenter=ANDOVERQA&mac=00:50:56:92:78:46')
 
-# handleUnknownMAC = httpdb._handle_unknown_mac
+handleUnknownMAC = httpdb._handle_unknown_mac

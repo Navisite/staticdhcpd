@@ -78,6 +78,7 @@ def _parse_server_response(json_data):
 import json
 import logging
 import urllib2
+import netaddr
 
 from staticdhcpdlib.databases.generic import (Definition, Database, CachingDatabase)
 
@@ -101,6 +102,7 @@ class _HTTPLogic(object):
         self._name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
         self._lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
         self._serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
+        self._local_relays = getattr(config, 'X_HTTPDB_LOCAL_RELAYS', True)
 
     def _lookupMAC(self, mac):
         """
@@ -161,13 +163,15 @@ class _HTTPLogic(object):
                  'mac': str(mac),
                 })
                 return None
-
+            _logger.debug("results %s" % results)
             definitions = [self._parse_server_response(result) for result in results]
 
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
              'mac': str(mac),
             })
+            _logger.debug("defs %s" % definitions)
+
             return definitions
         except Exception, e:
             _logger.error("Failed to lookup '%(mac)s' on '%(uri)s': %(error)s" % {
@@ -178,24 +182,56 @@ class _HTTPLogic(object):
             raise
 
     def _parse_server_response(self, json_data):
-        json_data['domain_name_servers'] = json_data.get('domain_name_servers') or self._name_servers
+        json_data['domain_name_servers'] = json_data.get('domain_name_servers') \
+         or self._name_servers
         json_data['lease_time'] = json_data.get('lease_time') or self._lease_time
         json_data['serial'] = json_data.get('serial') or self._serial
         return _parse_server_response(json_data)
 
-    def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None, ip=None,
-                            giaddr=None, pxe=None, pxe_options=None):
-        # TODO - update this function to return None if additional info is not avail
-        #        to check against subnet - also add verification of subnet
-        if all(x is None for x in [packet_type, mac, ip, giaddr, pxe, pxe_options]):
-            #packet_or_mac is mac
-            result = self._lookupMAC(packet_or_mac)
-            if result and isinstance(result, (list,tuple)) and len(result) == 1:
-                return result[0]
+    def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
+                            ip=None, giaddr=None, pxe=None, pxe_options=None):
+
+
+        if all(x is None for x in [packet_type, mac, ip, giaddr, pxe,
+                                   pxe_options]):
+            #packet_or_mac is a MAC address here
+            results = self._lookupMAC(packet_or_mac)
+            if isinstance(results, (list,tuple)) and len(results) == 1:
+                #Only a single result indicates that the IP found
+                # isn't ambiguous
+                return results[0]
+
+            else:
+                #It's ambiguous what result this MAC should be
+                # given, so don't return any
+                return None
+
+        else:
+            #packet_or_mac is a packet
+            results = self._lookupMAC(mac)
+            if not isinstance(results, (list,tuple)):
+                return None
+
+            for result in results:
+                if not giaddr and ip != result.ip:
+                    #Case where there's a RENEW/REBIND and
+                    # we have the client IP address
+                    #We can be more specific about the check
+                    continue
+
+                elif self._local_relays and giaddr and result.subnet_mask:
+                    #We can determine the correct result since the
+                    # giaddr should exist in the same network as
+                    # the response IP address
+                    #TODO: What happens under multiple relays in the chain?
+                    network = netaddr.IPNetwork(
+                     '%s/%s' % (result.ip, result.subnet_mask))
+
+                    if netaddr.IPAddress(str(giaddr)) in network:
+                        return result
+
             else:
                 return None
-        else:
-            return None
 
 
 class HTTPDatabase(Database, _HTTPLogic):
@@ -203,7 +239,7 @@ class HTTPDatabase(Database, _HTTPLogic):
         _HTTPLogic.__init__(self)
 
     def lookupMAC(self, packet_or_mac, packet_type=None, mac=None, ip=None,
-                  giaddr=None, pxe=None, pxe_options=None):
+                  giaddr=None, pxe_options=None):
         return self._retrieveDefinition(packet_or_mac, packet_type, mac, ip,
                                         giaddr, pxe_options)
 
@@ -215,7 +251,39 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
             CachingDatabase.__init__(self)
         _HTTPLogic.__init__(self)
 
-# def _handle_unknown_mac(packet, packet_type, mac, ip,
-#                            giaddr, pxe_options):
-#     HTTPDatabase().lookupMAC(packet, packet_type, mac, ip,
-#                                       giaddr, pxe_options)
+http_database = None
+def _handle_unknown_mac(packet, packet_type, mac, ip,
+                           giaddr, pxe_options):
+    """
+    Handles case where MAC was not found in initial lookup
+
+    :param :class:`libpydhcpserver.dhcp_types.packet.DHCPPacket` packet: The
+        packet being wrapped.
+    :param basestring packet_type: The type of packet being processed.
+    :param str mac: The MAC of the responding interface, in network-byte order.
+    :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` ip: Value of
+        DHCP packet's `requested_ip_address` field.
+    :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` giaddr: Value of
+        the packet's relay IP address
+    :param namedtuple pxe_options: PXE options
+    :return :class:`databases.generic.Definition` definition: The associated
+         definition; None if no "lease" is available.
+    """
+    z = (packet, packet_type, mac, ip, giaddr, pxe_options)
+    _logger.debug('*'*150 + str(z))
+
+    if str(mac == '00:50:56:92:78:46'):
+        from libpydhcpserver.dhcp_types.ipv4 import IPv4
+        giaddr = IPv4('10.193.10.90')
+        z = (packet, packet_type, mac, ip, giaddr, pxe_options)
+        _logger.debug('*'*150 + str(z))
+
+    if not http_database:
+        #We need to ensure that the init happens after the config
+        # is fully loaded, but don't want it to create a new instance
+        # every time; So do it on the first call
+        global http_database
+        http_database = HTTPDatabase()
+
+    return http_database.lookupMAC(packet, packet_type, mac, ip,
+                                   giaddr, pxe_options)
