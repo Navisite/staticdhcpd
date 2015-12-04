@@ -96,9 +96,7 @@ class _HTTPLogic(object):
             raise AttributeError("X_HTTPDB_URI must be specified in conf.py")
         self._headers = getattr(config, 'X_HTTPDB_HEADERS', {})
         self._post = getattr(config, 'X_HTTPDB_POST', False)
-        additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
-        string_list = ['&%s=%s' % (key, value) for key, value in additional_info.iteritems()]
-        self._additional_info = ''.join(string_list)
+        self._additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
         self._name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
         self._lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
         self._serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
@@ -113,40 +111,40 @@ class _HTTPLogic(object):
         #If you need to generate per-request headers, add them here
         headers = self._headers.copy()
 
+        params = dict(
+         {'mac': str(mac)},
+         **self._additional_info
+        )
         #You can usually ignore this if-block, though you could strip out whichever method you don't use
         if self._post:
-            data = json.dumps(dict(
-             {'mac': str(mac)},
-             **self._additional_info
-            ))
+            data = json.dumps(params)
 
             headers.update({
              'Content-Length': str(len(data)),
              'Content-Type': 'application/json',
             })
 
-            url = self._uri
-
             request = urllib2.Request(
              self._uri, data=data,
              headers=headers,
             )
         else:
-            url = "%(uri)s?mac=%(mac)s%(add_info)s" % {
-             'uri': self._uri,
-             'mac': str(mac).replace(':', '%3A'),
-             'add_info': self._additional_info
-            }
+
+            add_info = '.'.join(['&%s=%s' % (key, value) for key, value in
+              self._additional_info.iteritems()])
 
             request = urllib2.Request(
-             url,
+             "%(uri)s?mac=%(mac)s%(add_info)s" % {
+              'uri': self._uri,
+              'mac': str(mac).replace(':', '%3A'),
+              'add_info': add_info
+             },
              headers=headers,
             )
 
-        _logger.debug("Sending request to '%(uri)s' for '%(mac)s'... %(url)s" % {
+        _logger.debug("Sending request to '%(uri)s' for '%(params)s'" % {
          'uri': self._uri,
-         'mac': str(mac),
-         'url': url
+         'params': params
         })
 
         try:
@@ -254,6 +252,7 @@ class _HTTPLogic(object):
                         return result
 
             else:
+                #No DB results match the request data
                 return None
 
 
