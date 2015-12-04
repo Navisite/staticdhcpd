@@ -269,15 +269,6 @@ def _handle_unknown_mac(packet, packet_type, mac, ip,
     :return :class:`databases.generic.Definition` definition: The associated
          definition; None if no "lease" is available.
     """
-    z = (packet, packet_type, mac, ip, giaddr, pxe_options)
-    _logger.debug('*'*150 + str(z))
-
-    if str(mac == '00:50:56:92:78:46'):
-        from libpydhcpserver.dhcp_types.ipv4 import IPv4
-        giaddr = IPv4('10.193.10.90')
-        z = (packet, packet_type, mac, ip, giaddr, pxe_options)
-        _logger.debug('*'*150 + str(z))
-
     if not http_database:
         #We need to ensure that the init happens after the config
         # is fully loaded, but don't want it to create a new instance
@@ -285,5 +276,7 @@ def _handle_unknown_mac(packet, packet_type, mac, ip,
         global http_database
         http_database = HTTPDatabase()
 
+    _logger.debug('Handling %s' % str((packet, packet_type, mac, ip,
+     giaddr, pxe_options)))
     return http_database.lookupMAC(packet, packet_type, mac, ip,
                                    giaddr, pxe_options)
