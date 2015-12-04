@@ -163,7 +163,7 @@ class _HTTPLogic(object):
                  'mac': str(mac),
                 })
                 return None
-            _logger.debug("results %s" % results)
+            _logger.debug("Results from call: %s" % results)
             definitions = [self._parse_server_response(result) for result in results]
 
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
@@ -182,6 +182,14 @@ class _HTTPLogic(object):
             raise
 
     def _parse_server_response(self, json_data):
+        """
+        Parse the response returned from the server, setting defaults
+         as set in config if needed
+
+        :param dictionary json_data: The type of packet being processed.
+        :return :class:`databases.generic.Definition` definition: The associated
+            definition; None if no "lease" is available.
+        """
         json_data['domain_name_servers'] = json_data.get('domain_name_servers') \
          or self._name_servers
         json_data['lease_time'] = json_data.get('lease_time') or self._lease_time
@@ -190,7 +198,23 @@ class _HTTPLogic(object):
 
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
                             ip=None, giaddr=None, pxe=None, pxe_options=None):
+        """
+        Retrieve the definition matching the input arguments
 
+        :param :class:`libpydhcpserver.dhcp_types.packet.DHCPPacket` or string:
+            Either the DHCPPacket representing the request or the MAC
+              address to lookup packet being wrapped.
+        :param basestring packet_type: The type of packet being processed.
+        :param str mac: The MAC of the responding interface, in network-byte
+            order.
+        :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` ip: Value of
+            DHCP packet's `requested_ip_address` field.
+        :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` giaddr: Value of
+            the packet's relay IP address
+        :param namedtuple pxe_options: PXE options
+        :return :class:`databases.generic.Definition` definition: The associated
+            definition; None if no "lease" is available.
+        """
 
         if all(x is None for x in [packet_type, mac, ip, giaddr, pxe,
                                    pxe_options]):
