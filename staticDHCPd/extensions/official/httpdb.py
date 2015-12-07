@@ -154,6 +154,8 @@ class _HTTPLogic(object):
              'mac': str(mac),
             })
             results = json.loads(response.read())
+            if not isinstance(results, (list,tuple)):
+                results = [results]
 
             if not results: #The server sent back 'null' or an empty object
                 _logger.debug("Unknown MAC response from '%(uri)s' for '%(mac)s'" % {
@@ -162,15 +164,14 @@ class _HTTPLogic(object):
                 })
                 return None
             _logger.debug("Results from call: %s" % results)
-            definitions = [self._parse_server_response(result) for result in results]
 
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
              'mac': str(mac),
             })
-            _logger.debug("defs %s" % definitions)
 
-            return definitions
+            return [_parse_server_response(self._set_defaults(result))
+              for result in results]
         except Exception, e:
             _logger.error("Failed to lookup '%(mac)s' on '%(uri)s': %(error)s" % {
              'uri': self._uri,
@@ -179,20 +180,21 @@ class _HTTPLogic(object):
             })
             raise
 
-    def _parse_server_response(self, json_data):
+    def _set_defaults(self, json_data):
         """
-        Parse the response returned from the server, setting defaults
-         as set in config if needed
+        Set the default values on a server response if they do not
+         already have usable values
 
-        :param dictionary json_data: The type of packet being processed.
-        :return :class:`databases.generic.Definition` definition: The associated
-            definition; None if no "lease" is available.
+        :param dictionary json_data: Dictionary containing response data
+        :return dictionary: The modified dictionary with defaults
         """
-        json_data['domain_name_servers'] = json_data.get('domain_name_servers') \
-         or self._name_servers
-        json_data['lease_time'] = json_data.get('lease_time') or self._lease_time
-        json_data['serial'] = json_data.get('serial') or self._serial
-        return _parse_server_response(json_data)
+        if not json_data.get('serial'):
+            json_data['serial'] = self._serial
+        if not json_data.get('domain_name_servers'):
+            json_data['domain_name_servers'] = self._name_servers
+        if not json_data.get('lease_time'):
+            json_data['lease_time'] = self._lease_time
+        return json_data
 
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
                             ip=None, giaddr=None, pxe_options=None):
