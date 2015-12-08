@@ -97,10 +97,10 @@ class _HTTPLogic(object):
         self._headers = getattr(config, 'X_HTTPDB_HEADERS', {})
         self._post = getattr(config, 'X_HTTPDB_POST', False)
         self._additional_info = getattr(config, 'X_HTTPDB_ADDITIONAL_INFO', {})
-        self._name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
-        self._lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
-        self._serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
-        self._local_relays = getattr(config, 'X_HTTPDB_LOCAL_RELAYS', True)
+        self._default_name_servers = getattr(config, 'X_HTTPDB_DEFAULT_NAME_SERVERS', '')
+        self._default_lease_time = getattr(config, 'X_HTTPDB_DEFAULT_LEASE_TIME', 0)
+        self._default_serial = getattr(config, 'X_HTTPDB_DEFAULT_SERIAL', 0)
+        self._use_local_relays = getattr(config, 'X_HTTPDB_LOCAL_RELAYS', True)
 
     def _lookupMAC(self, mac):
         """
@@ -129,7 +129,6 @@ class _HTTPLogic(object):
              headers=headers,
             )
         else:
-
             add_info = '.'.join(['&%s=%s' % (key, value) for key, value in
               self._additional_info.iteritems()])
 
@@ -189,11 +188,11 @@ class _HTTPLogic(object):
         :return dictionary: The modified dictionary with defaults
         """
         if not json_data.get('serial'):
-            json_data['serial'] = self._serial
+            json_data['serial'] = self._default_serial
         if not json_data.get('domain_name_servers'):
-            json_data['domain_name_servers'] = self._name_servers
+            json_data['domain_name_servers'] = self._default_name_servers
         if not json_data.get('lease_time'):
-            json_data['lease_time'] = self._lease_time
+            json_data['lease_time'] = self._default_lease_time
         return json_data
 
     def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
@@ -232,30 +231,25 @@ class _HTTPLogic(object):
         else:
             #packet_or_mac is a packet
             results = self._lookupMAC(mac)
-            if not isinstance(results, (list,tuple)):
+            if not (isinstance(results, (list, tuple)) or
+                    self._use_local_relays):
                 return None
-
-            for result in results:
-                if not giaddr and ip != result.ip:
-                    #Case where there's a RENEW/REBIND and
-                    # we have the client IP address
-                    #We can be more specific about the check
-                    continue
-
-                elif self._local_relays and giaddr and result.subnet_mask:
-                    #We can determine the correct result since the
-                    # giaddr should exist in the same network as
-                    # the response IP address
-                    #TODO: What happens under multiple relays in the chain?
-                    network = netaddr.IPNetwork(
-                     '%s/%s' % (result.ip, result.subnet_mask))
-
-                    if netaddr.IPAddress(str(giaddr)) in network:
-                        return result
 
             else:
-                #No DB results match the request data
-                return None
+                for result in results:
+                    #TODO: Handle RENEW/REBIND where we know the IP address
+                    if giaddr and result.subnet_mask:
+                        #We can determine the correct result since the
+                        # giaddr should exist in the same network as
+                        # the response IP address
+                        #TODO: What happens under multiple relays in the chain?
+                        network = netaddr.IPNetwork(
+                         '%s/%s' % (result.ip, result.subnet_mask))
+
+                        if netaddr.IPAddress(str(giaddr)) in network:
+                            return result
+                else:
+                    return None
 
 
 class HTTPDatabase(Database, _HTTPLogic):
@@ -277,7 +271,7 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
 
 http_database = None
 def _handle_unknown_mac(packet, packet_type, mac, ip,
-                           giaddr, pxe_options):
+                        giaddr, pxe_options):
     """
     Handles case where MAC was not found in initial lookup
 
