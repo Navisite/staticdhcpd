@@ -171,50 +171,59 @@ class MemcachedCache(_DatabaseCache):
     _mac_cache = None #: A dictionary of cached MACs
     _subnet_cache = None #: A dictionary of cached subnet/serial data
 
-    def __init__(self, name, memcached_server, memcached_age_time, chained_cache=None):
+    def __init__(self, name, memcached_server_data, memcached_age_time, chained_cache=None):
         """
         Initialises the cache.
 
         :param basestring name: The name of the cache.
-        :param basestring memcached_server: Address and port to connect to the memcached server.
+        :param tuple memcached_server_data: Address and port to connect to the memcached server.
         :param basestring memcached_age_time: number of seconds to store items in memcache.
         :param :class:`_DatabaseCache <_DatabaseCache>` chained_cache: The next
             node in the chain; None if this is the end.
         """
         _DatabaseCache.__init__(self, name, chained_cache=chained_cache)
         import memcache
-
-        self.mc_client = memcache.Client([memcached_server])
+        memcached_address = '%(server)s:%(port)d' % {
+                 'server': memcached_server_data[0],
+                 'port': memcached_server_data[1],
+                }
+        self.mc_client = memcache.Client([memcached_address])
         self.memcached_age_time = memcached_age_time
         _logger.debug("Memcached database-cache initialised")
 
     def _reinitialise(self):
-        self.mc_client.flush_all()
+        pass
 
     def _lookupMAC(self, mac):
         data = self.mc_client.get(str(mac))
         if data:
             (ip, hostname, extra, subnet_id) = data
-            subnet_str = "%s-%s" % subnet_id
+            subnet_str = self._create_subnet_key(subnet_id)
             details = self.mc_client.get(subnet_str)
-            return Definition(
-             ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
-             hostname=hostname,
-             gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
-             domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
-             extra=extra
-            )
+            if details:
+                return Definition(
+                 ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
+                 hostname=hostname,
+                 gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
+                 domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
+                 extra=extra
+                )
         return None
 
     def _cacheMAC(self, mac, definition, chained):
         subnet_id = (definition.subnet, definition.serial)
-        subnet_str = "%s-%s" % subnet_id
-        self.mc_client.set(str(mac), (definition.ip, definition.hostname, definition.extra, subnet_id), self.memcached_age_time)
+        subnet_str = self._create_subnet_key(subnet_id)
+        self.mc_client.set(str(mac), (definition.ip, definition.hostname,
+                                      definition.extra, subnet_id),
+                           self.memcached_age_time)
         self.mc_client.set(subnet_str, (
          definition.gateways, definition.subnet_mask, definition.broadcast_address,
          definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
          definition.lease_time
          ), self.memcached_age_time)
+
+    def _create_subnet_key(self, subnet_id):
+        return "%s-%i" % (subnet_id[0].replace(" ", "_"), subnet_id[1])
 
 class DiskCache(_DatabaseCache):
     _filepath = None #: The path to which the persistent file will be written
