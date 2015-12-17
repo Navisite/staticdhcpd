@@ -184,9 +184,9 @@ class MemcachedCache(_DatabaseCache):
         _DatabaseCache.__init__(self, name, chained_cache=chained_cache)
         import memcache
         memcached_address = '%(server)s:%(port)d' % {
-                 'server': memcached_server_data[0],
-                 'port': memcached_server_data[1],
-                }
+         'server': memcached_server_data[0],
+         'port': memcached_server_data[1],
+        }
         self.mc_client = memcache.Client([memcached_address])
         self.memcached_age_time = memcached_age_time
         _logger.debug("Memcached database-cache initialised")
@@ -213,14 +213,20 @@ class MemcachedCache(_DatabaseCache):
     def _cacheMAC(self, mac, definition, chained):
         subnet_id = (definition.subnet, definition.serial)
         subnet_str = self._create_subnet_key(subnet_id)
-        self.mc_client.set(str(mac), (definition.ip, definition.hostname,
-                                      definition.extra, subnet_id),
-                           self.memcached_age_time)
-        self.mc_client.set(subnet_str, (
-         definition.gateways, definition.subnet_mask, definition.broadcast_address,
-         definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
-         definition.lease_time
-         ), self.memcached_age_time)
+        self.mc_client.set(
+         str(mac),
+         (definition.ip, definition.hostname, definition.extra, subnet_id),
+         self.memcached_age_time
+        )
+        self.mc_client.set(
+         subnet_str,
+         (
+          definition.gateways, definition.subnet_mask, definition.broadcast_address,
+          definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
+          definition.lease_time
+         ),
+         self.memcached_age_time
+        )
 
     def _create_subnet_key(self, subnet_id):
         return "%s-%i" % (subnet_id[0].replace(" ", "_"), subnet_id[1])
