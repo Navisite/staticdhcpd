@@ -233,7 +233,6 @@ class _HTTPLogic(object):
         else:
             #packet_or_mac is a packet
             results = self._lookupMAC(mac)
-            _logger.debug(isinstance(results, (list, tuple)))
             if not (isinstance(results, (list, tuple)) or
                     self._use_local_relays):
                 return None
@@ -280,8 +279,8 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
         if self._cache and cache_mac:
             try:
                 definition = self._cache.lookupMAC(cache_mac)
-            except Exception, e:
-                _logger.error("Cache lookup failed:\n" + traceback.format_exc())
+            except Exception as exc:
+                _logger.error("Cache lookup failed:\n%s" % exc, exc_info=True)
             else:
                 if definition:
                     return definition
@@ -290,8 +289,8 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
         if definition and self._cache and cache_mac:
             try:
                 self._cache.cacheMAC(cache_mac, definition)
-            except Exception, e:
-                _logger.error("Cache update failed:\n" + traceback.format_exc())
+            except Exception as exc:
+                _logger.error("Cache update failed:\n%s" % exc, exc_info=True)
         return definition
 
 http_database = None
@@ -319,7 +318,6 @@ def _handle_unknown_mac(packet, packet_type, mac, ip,
         global http_database
         http_database = HTTPDatabase()
 
-    _logger.debug('Handling %s' % str((packet, packet_type, mac, ip,
-     giaddr, pxe_options)))
+    _logger.debug('Unknown MAC %(mac)s (ip=%(ip)s; giaddr=%(giaddr)s)' % {'mac':mac, 'ip':ip, 'giaddr':giaddr})
     return http_database.lookupMAC(packet, packet_type, mac, ip,
                                    giaddr, pxe_options)
