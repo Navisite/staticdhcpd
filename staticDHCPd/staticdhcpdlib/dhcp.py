@@ -411,7 +411,7 @@ class _DHCPServer(libpydhcpserver.dhcp.DHCPServer):
     _dhcp_actions = None #: The MACs and the number of actions each has performed, decremented by one each tick.
     _ignored_addresses = None #: A list of all MACs currently ignored, plus the time remaining until requests will be honoured again.
 
-    def __init__(self, server_address, server_port, client_port, pxe_port, response_interface, response_interface_qtags, database):
+    def __init__(self, server_address, server_port, client_port, pxe_port, response_interface, response_interface_qtags, database, listen_interface=None):
         """
         Constructs the handler.
 
@@ -434,7 +434,7 @@ class _DHCPServer(libpydhcpserver.dhcp.DHCPServer):
         self._ignored_addresses = []
 
         libpydhcpserver.dhcp.DHCPServer.__init__(
-         self, server_address, server_port, client_port, pxe_port, response_interface=response_interface, response_interface_qtags=response_interface_qtags
+         self, server_address, server_port, client_port, pxe_port, response_interface=response_interface, response_interface_qtags=response_interface_qtags, listen_interface=listen_interface
         )
 
     @_dhcpHandler(_PACKET_TYPE_DECLINE)
@@ -878,7 +878,7 @@ class DHCPService(threading.Thread):
         self.daemon = True
 
         server_address = IPv4(config.DHCP_SERVER_IP)
-        _logger.info("Prepared to bind to %(address)s; ports: server: %(server)s, client: %(client)s, pxe: %(pxe)s%(response-interface)s" % {
+        _logger.info("Prepared to bind to %(address)s; ports: server: %(server)s, client: %(client)s, pxe: %(pxe)s%(response-interface)s%(listen-interface)s" % {
          'address': server_address,
          'server': config.DHCP_SERVER_PORT,
          'client': config.DHCP_CLIENT_PORT,
@@ -889,6 +889,8 @@ class DHCPService(threading.Thread):
            'qtags': config.DHCP_RESPONSE_INTERFACE_QTAGS,
           } or '',
          } or '',
+         'listen-interface': config.DHCP_LISTEN_INTERFACE and '; listen-interface: %(listen-interface)s' % {
+           'listen-interface': config.DHCP_LISTEN_INTERFACE} or ''
         })
         self._dhcp_server = _DHCPServer(
          server_address,
@@ -897,7 +899,8 @@ class DHCPService(threading.Thread):
          config.PXE_PORT,
          config.DHCP_RESPONSE_INTERFACE,
          config.DHCP_RESPONSE_INTERFACE_QTAGS,
-         database
+         database,
+         config.DHCP_LISTEN_INTERFACE,
         )
         _logger.info("Configured DHCP server")
 

@@ -22,6 +22,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (C) Neil Tallim, 2014 <flan@uguu.ca>
 """
+import pickle
 import json
 import logging
 import threading
@@ -156,6 +157,9 @@ class MemoryCache(_DatabaseCache):
         return None
 
     def _cacheMAC(self, mac, definition, chained):
+        if isinstance(definition, (list,tuple)):
+           raise Exception('MemoryCache does not currently support caching mutilple definitions at once')
+
         subnet_id = (definition.subnet, definition.serial)
         self._mac_cache[int(mac)] = (definition.ip, definition.hostname, definition.extra, subnet_id)
         self._subnet_cache[subnet_id] = (
@@ -197,35 +201,43 @@ class MemcachedCache(_DatabaseCache):
     def _lookupMAC(self, mac):
         data = self.mc_client.get(str(mac))
         if data:
-            (ip, hostname, extra, subnet_id) = data
-            subnet_str = self._create_subnet_key(subnet_id)
-            details = self.mc_client.get(subnet_str)
-            if details:
-                return Definition(
-                 ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
-                 hostname=hostname,
-                 gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
-                 domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
-                 extra=extra
-                )
+            results = []
+            for datum in pickle.loads(data):
+                (ip, hostname, extra, subnet_id) = datum
+                subnet_str = self._create_subnet_key(subnet_id)
+                details = self.mc_client.get(subnet_str)
+                if details:
+                    results.append(Definition(
+                     ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
+                     hostname=hostname,
+                     gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
+                     domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
+                     extra=extra
+                    ))
+            if results:
+                return results
         return None
 
-    def _cacheMAC(self, mac, definition, chained):
-        subnet_id = (definition.subnet, definition.serial)
-        subnet_str = self._create_subnet_key(subnet_id)
+    def _cacheMAC(self, mac, definitions, chained):
+        if not isinstance(definitions, (list,tuple)):
+            definitions = [definitions]
+
+        mac_list = []
+        for definition in definitions:
+            subnet_id = (definition.subnet, definition.serial)
+            subnet_str = self._create_subnet_key(subnet_id)
+            mac_list.append((definition.ip, definition.hostname, definition.extra, subnet_id))
+            self.mc_client.set(
+             subnet_str,
+             (definition.gateways, definition.subnet_mask, definition.broadcast_address,
+              definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
+              definition.lease_time
+             ),
+             self.memcached_age_time
+            )
+
         self.mc_client.set(
-         str(mac),
-         (definition.ip, definition.hostname, definition.extra, subnet_id),
-         self.memcached_age_time
-        )
-        self.mc_client.set(
-         subnet_str,
-         (
-          definition.gateways, definition.subnet_mask, definition.broadcast_address,
-          definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
-          definition.lease_time
-         ),
-         self.memcached_age_time
+         str(mac), pickle.dumps(mac_list), self.memcached_age_time
         )
 
     def _create_subnet_key(self, subnet_id):
@@ -334,6 +346,8 @@ LIMIT 1""", (int(mac),))
         return None
 
     def _cacheMAC(self, mac, definition, chained):
+        if isinstance(definition, (list,tuple)):
+           raise Exception('DiskCache does not currently support caching mutilple definitions at once')
         (database, cursor) = self._connect()
         cursor.execute("INSERT OR IGNORE INTO subnets (subnet, serial, lease_time, gateway, subnet_mask, broadcast_address, ntp_servers, domain_name_servers, domain_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
          (

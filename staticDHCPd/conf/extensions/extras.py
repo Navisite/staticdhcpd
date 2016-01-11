@@ -1,7 +1,7 @@
-import netaddr
+from libpydhcpserver.dhcp_types.ipv4 import IPv4
 
-def filterRetrievedDefitions(definitions, packet, packet_type, mac,
-                             ip, giaddr, pxe_options):
+def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
+                               ip, giaddr, pxe_options):
     """
     Filter the possible definitions by using the extra information
 
@@ -35,10 +35,7 @@ def filterRetrievedDefitions(definitions, packet, packet_type, mac,
             # giaddr should exist in the same network as
             # the response IP address
             #TODO: What happens under multiple relays in the chain?
-            network = netaddr.IPNetwork(
-                '%s/%s' % (definition.ip, definition.subnet_mask))
-
-            if netaddr.IPAddress(str(giaddr)) in network:
+            if giaddr.isSubnetMember(definition.ip, definition.subnet_mask):
                return definition
     else:
         return None
