@@ -164,7 +164,8 @@ class _HTTPLogic(object):
                  'mac': str(mac),
                 })
                 return None
-            _logger.debug("Results from call: %s" % results)
+
+            _logger.debug("Results from HTTPDB call: %s" % results)
 
             _logger.debug("Known MAC response from '%(uri)s' for '%(mac)s'" % {
              'uri': self._uri,
@@ -173,6 +174,7 @@ class _HTTPLogic(object):
 
             return [_parse_server_response(self._set_defaults(result))
               for result in results]
+
         except Exception, e:
             _logger.error("Failed to lookup '%(mac)s' on '%(uri)s': %(error)s" % {
              'uri': self._uri,
@@ -197,71 +199,12 @@ class _HTTPLogic(object):
             json_data['lease_time'] = self._default_lease_time
         return json_data
 
-    def _retrieveDefinition(self, packet_or_mac, packet_type=None, mac=None,
-                            ip=None, giaddr=None, pxe_options=None):
-        """
-        Retrieve the definition matching the input arguments
-
-        :param :class:`libpydhcpserver.dhcp_types.packet.DHCPPacket` or string:
-            Either the DHCPPacket representing the request or the MAC
-              address to lookup packet being wrapped.
-        :param basestring packet_type: The type of packet being processed.
-        :param str mac: The MAC of the responding interface, in network-byte
-            order.
-        :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` ip: Value of
-            DHCP packet's `requested_ip_address` field.
-        :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` giaddr: Value of
-            the packet's relay IP address
-        :param namedtuple pxe_options: PXE options
-        :return :class:`databases.generic.Definition` definition: The associated
-            definition; None if no "lease" is available.
-        """
-
-        if all(x is None for x in [packet_type, mac, ip, giaddr, pxe_options]):
-            #packet_or_mac is a MAC address here
-            results = self._lookupMAC(packet_or_mac)
-            if isinstance(results, (list,tuple)) and len(results) == 1:
-                #Only a single result indicates that the IP found
-                # isn't ambiguous
-                return results[0]
-
-            else:
-                #It's ambiguous what result this MAC should be
-                # given, so don't return any
-                return None
-
-        else:
-            #packet_or_mac is a packet
-            results = self._lookupMAC(mac)
-            if not (isinstance(results, (list, tuple)) or
-                    self._use_local_relays):
-                return None
-
-            else:
-                for result in results:
-                    #TODO: Handle RENEW/REBIND where we know the IP address
-                    if giaddr and result.subnet_mask:
-                        #We can determine the correct result since the
-                        # giaddr should exist in the same network as
-                        # the response IP address
-                        #TODO: What happens under multiple relays in the chain?
-                        network = netaddr.IPNetwork(
-                         '%s/%s' % (result.ip, result.subnet_mask))
-
-                        if netaddr.IPAddress(str(giaddr)) in network:
-                            return result
-                else:
-                    return None
-
-
 class HTTPDatabase(Database, _HTTPLogic):
     def __init__(self):
         _HTTPLogic.__init__(self)
 
-    def lookupMAC(self, packet_or_mac, packet_type=None, mac=None, ip=None,
-                  giaddr=None, pxe_options=None):
-        return self._retrieveDefinition(packet_or_mac, packet_type, mac, ip,
-                                        giaddr, pxe_options)
+    def lookupMAC(self, mac):
+        return self._lookupMAC(mac)
 
 class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
     def __init__(self):
@@ -271,53 +214,3 @@ class HTTPCachingDatabase(CachingDatabase, _HTTPLogic):
         else:
             CachingDatabase.__init__(self)
         _HTTPLogic.__init__(self)
-
-    def lookupMAC(self, packet_or_mac, packet_type=None, mac=None, ip=None,
-                  giaddr=None, pxe_options=None):
-        cache_mac = packet_or_mac if type(packet_or_mac) == MAC else mac
-
-        if self._cache and cache_mac:
-            try:
-                definition = self._cache.lookupMAC(cache_mac)
-            except Exception as exc:
-                _logger.error("Cache lookup failed:\n%s" % exc, exc_info=True)
-            else:
-                if definition:
-                    return definition
-        definition = self._retrieveDefinition(packet_or_mac, packet_type, mac, ip,
-                                              giaddr, pxe_options)
-        if definition and self._cache and cache_mac:
-            try:
-                self._cache.cacheMAC(cache_mac, definition)
-            except Exception as exc:
-                _logger.error("Cache update failed:\n%s" % exc, exc_info=True)
-        return definition
-
-http_database = None
-def _handle_unknown_mac(packet, packet_type, mac, ip,
-                        giaddr, pxe_options):
-    """
-    Handles case where MAC was not found in initial lookup
-
-    :param :class:`libpydhcpserver.dhcp_types.packet.DHCPPacket` packet: The
-        packet being wrapped.
-    :param basestring packet_type: The type of packet being processed.
-    :param str mac: The MAC of the responding interface, in network-byte order.
-    :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` ip: Value of
-        DHCP packet's `requested_ip_address` field.
-    :param :class:`libpydhcpserver.dhcp_types.ipv4.IPv4` giaddr: Value of
-        the packet's relay IP address
-    :param namedtuple pxe_options: PXE options
-    :return :class:`databases.generic.Definition` definition: The associated
-         definition; None if no "lease" is available.
-    """
-    if not http_database:
-        #We need to ensure that the init happens after the config
-        # is fully loaded, but don't want it to create a new instance
-        # every time; So do it on the first call
-        global http_database
-        http_database = HTTPDatabase()
-
-    _logger.debug('Unknown MAC %(mac)s (ip=%(ip)s; giaddr=%(giaddr)s)' % {'mac':mac, 'ip':ip, 'giaddr':giaddr})
-    return http_database.lookupMAC(packet, packet_type, mac, ip,
-                                   giaddr, pxe_options)

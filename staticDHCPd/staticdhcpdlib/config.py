@@ -199,6 +199,7 @@ if hasattr(conf, 'filterPacket'):
     filterPacket = conf.filterPacket
 else:
     filterPacket = lambda *args, **kwargs : True
+
 if hasattr(conf, 'handleUnknownMAC'):
     if inspect.getargspec(conf.handleUnknownMAC).args == ['mac']:
         #It's pre-2.0.0, so wrap it for backwards-compatibility
@@ -210,6 +211,13 @@ if hasattr(conf, 'handleUnknownMAC'):
         handleUnknownMAC = conf.handleUnknownMAC
 else:
     handleUnknownMAC = lambda *args, **kwargs : None
+
+if hasattr(conf, 'filterRetrievedDefinitions'):
+    filterRetrievedDefinitions = conf.filterRetrievedDefinitions
+else:
+    #Revisit idea of returning just the first element
+    filterRetrievedDefinitions = lambda *args, **kwargs : None
+
 if hasattr(conf, 'loadDHCPPacket'):
     if inspect.getargspec(conf.loadDHCPPacket).args == ['packet', 'mac', 'client_ip', 'relay_ip', 'subnet', 'serial', 'pxe', 'vendor']:
         #It's pre-2.0.0, so wrap it for backwards-compatibility
