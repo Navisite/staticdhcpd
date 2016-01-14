@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+"""
+Additional tools for processing DHCP requests
+
+Copyright 2016 NaviSite Inc. - A Time Warner Cable Company
+"""
+
 from libpydhcpserver.dhcp_types.ipv4 import IPv4
 
 def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
@@ -5,12 +12,7 @@ def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
     """
     Filter the possible definitions by using the extra information
 
-    :param :class:`libpydhcpserver.dhcp_types.packet.DHCPPacket` or string:
-        Either the DHCPPacket representing the request or the MAC
-          address to lookup packet being wrapped.
-
-
-
+    :param list: A list of definitions types to filter
     :param basestring packet_type: The type of packet being processed.
     :param str mac: The MAC of the responding interface, in network-byte
         order.

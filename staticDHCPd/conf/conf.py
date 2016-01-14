@@ -48,7 +48,5 @@ X_HTTPDB_DEFAULT_LEASE_TIME = 43200
 X_HTTPDB_DEFAULT_SERIAL = 0
 X_HTTPDB_LOCAL_RELAYS = False
 
-#test = requests.get('http://app-stage:8200/netconfig?datacenter=ANDOVERQA&mac=00:50:56:92:78:46')
-
-import extras
-filterRetrievedDefinitions = extras.filterRetrievedDefinitions
+import tools
+filterRetrievedDefinitions = tools.filterRetrievedDefinitions
