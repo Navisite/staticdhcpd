@@ -186,24 +186,62 @@ class MemcachedCache(_DatabaseCache):
             node in the chain; None if this is the end.
         """
         _DatabaseCache.__init__(self, name, chained_cache=chained_cache)
+        import memcache
         memcached_address = '%(server)s:%(port)d' % {
          'server': memcached_server_data[0],
          'port': memcached_server_data[1],
         }
-        import tools
-        self.mc_client = tools.Memcacher([memcached_address],
-                                         memcached_age_time)
-
+        self.mc_client = memcache.Client([memcached_address])
+        self.memcached_age_time = memcached_age_time
         _logger.debug("Memcached database-cache initialised")
 
     def _reinitialise(self):
         pass
 
     def _lookupMAC(self, mac):
-        return self.mc_client.lookupMAC(mac)
+        data = self.mc_client.get(str(mac))
+        if data:
+            results = []
+            for datum in pickle.loads(data):
+                (ip, hostname, extra, subnet_id) = datum
+                subnet_str = self._create_subnet_key(subnet_id)
+                details = self.mc_client.get(subnet_str)
+                if details:
+                    results.append(Definition(
+                     ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
+                     hostname=hostname,
+                     gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
+                     domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
+                     extra=extra
+                    ))
+            if results:
+                return results
+        return None
 
     def _cacheMAC(self, mac, definitions, chained):
-        self.mc_client.cacheMAC(mac, definitions)
+        if not isinstance(definitions, (list,tuple)):
+            definitions = [definitions]
+
+        mac_list = []
+        for definition in definitions:
+            subnet_id = (definition.subnet, definition.serial)
+            subnet_str = self._create_subnet_key(subnet_id)
+            mac_list.append((definition.ip, definition.hostname, definition.extra, subnet_id))
+            self.mc_client.set(
+             subnet_str,
+             (definition.gateways, definition.subnet_mask, definition.broadcast_address,
+              definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
+              definition.lease_time
+             ),
+             self.memcached_age_time
+            )
+
+        self.mc_client.set(
+         str(mac), pickle.dumps(mac_list), self.memcached_age_time
+        )
+
+    def _create_subnet_key(self, subnet_id):
+        return "%s-%i" % (subnet_id[0].replace(" ", "_"), subnet_id[1])
 
 class DiskCache(_DatabaseCache):
     _filepath = None #: The path to which the persistent file will be written
