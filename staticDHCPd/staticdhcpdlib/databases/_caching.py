@@ -29,8 +29,6 @@ import threading
 
 from generic import (Database, Definition)
 
-
-
 _logger = logging.getLogger('databases._caching')
 
 class _DatabaseCache(Database):
