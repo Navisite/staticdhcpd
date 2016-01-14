@@ -219,6 +219,8 @@ else:
     def filterRetrievedDefinitions(definitions, *args, **kwargs):
         if not definitions:
             return None
+        elif len(definitions) == 1:
+            return definitions[0]
         else:
             raise ValueError('Multiple definitions received and no filtering mechanism implemented')
 
