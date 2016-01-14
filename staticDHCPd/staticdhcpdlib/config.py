@@ -216,8 +216,12 @@ else:
 if hasattr(conf, 'filterRetrievedDefinitions'):
     filterRetrievedDefinitions = conf.filterRetrievedDefinitions
 else:
-    #Revisit idea of returning just the first element
-    filterRetrievedDefinitions = lambda *args, **kwargs : None
+    def filterRetrievedDefinitions(definitions, *args, **kwargs):
+        if not definitions:
+            return None
+        else:
+            raise ValueError('Multiple definitions received and no filtering mechanism implemented')
+
 
 if hasattr(conf, 'loadDHCPPacket'):
     if inspect.getargspec(conf.loadDHCPPacket).args == ['packet', 'mac', 'client_ip', 'relay_ip', 'subnet', 'serial', 'pxe', 'vendor']:
