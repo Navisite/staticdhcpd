@@ -4,8 +4,9 @@ Additional tools for processing DHCP requests
 
 Copyright 2016 NaviSite Inc. - A Time Warner Cable Company
 """
-
+import pickle
 from libpydhcpserver.dhcp_types.ipv4 import IPv4
+from staticdhcpdlib.databases.generic import Definition
 
 def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
                                ip, giaddr, pxe_options):
@@ -41,3 +42,62 @@ def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
                return definition
     else:
         return None
+
+
+class Memcacher(object):
+    def __init__(self, addresses, expire_time):
+        """
+        Class to facilitate storing and fetching
+          Definitions in memcache
+        """
+        import memcache
+        self.mc_client = memcache.Client(addresses)
+        self.expire_time = expire_time
+
+    def lookupMAC(self, mac):
+        data = self.mc_client.get(str(mac))
+        if data:
+            results = []
+            for datum in pickle.loads(data):
+                (ip, hostname, extra, subnet_id) = datum
+                subnet_str = self._create_subnet_key(subnet_id)
+                details = self.mc_client.get(subnet_str)
+                if details:
+                    results.append(Definition(
+                     ip=ip, lease_time=details[6], subnet=subnet_id[0],
+                     serial=subnet_id[1], hostname=hostname,
+                     gateways=details[0], subnet_mask=details[1],
+                     broadcast_address=details[2], domain_name=details[3],
+                     domain_name_servers=details[4], ntp_servers=details[5],
+                     extra=extra
+                    ))
+            if results:
+                return results
+        return None
+
+    def cacheMAC(self, mac, definitions):
+        if not isinstance(definitions, (list,tuple)):
+            definitions = [definitions]
+
+        mac_list = []
+        for definition in definitions:
+            subnet_id = (definition.subnet, definition.serial)
+            subnet_str = self._create_subnet_key(subnet_id)
+            mac_list.append((definition.ip, definition.hostname,
+                             definition.extra, subnet_id))
+            self.mc_client.set(
+             subnet_str,
+             (definition.gateways, definition.subnet_mask,
+              definition.broadcast_address, definition.domain_name,
+              definition.domain_name_servers, definition.ntp_servers,
+              definition.lease_time
+             ),
+             self.expire_time
+            )
+
+        self.mc_client.set(
+         str(mac), pickle.dumps(mac_list), self.expire_time
+        )
+
+    def _create_subnet_key(self, subnet_id):
+        return "%s-%i" % (subnet_id[0].replace(" ", "_"), subnet_id[1])
