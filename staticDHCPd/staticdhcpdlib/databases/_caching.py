@@ -22,6 +22,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (C) Neil Tallim, 2014 <flan@uguu.ca>
 """
+import pickle
 import json
 import logging
 import threading
@@ -156,6 +157,9 @@ class MemoryCache(_DatabaseCache):
         return None
 
     def _cacheMAC(self, mac, definition, chained):
+        if isinstance(definition, (list,tuple)):
+           raise Exception('MemoryCache does not currently support caching mutilple definitions at once')
+
         subnet_id = (definition.subnet, definition.serial)
         self._mac_cache[int(mac)] = (definition.ip, definition.hostname, definition.extra, subnet_id)
         self._subnet_cache[subnet_id] = (
@@ -182,54 +186,24 @@ class MemcachedCache(_DatabaseCache):
             node in the chain; None if this is the end.
         """
         _DatabaseCache.__init__(self, name, chained_cache=chained_cache)
-        import memcache
         memcached_address = '%(server)s:%(port)d' % {
          'server': memcached_server_data[0],
          'port': memcached_server_data[1],
         }
-        self.mc_client = memcache.Client([memcached_address])
-        self.memcached_age_time = memcached_age_time
+        import tools
+        self.mc_client = tools.Memcacher([memcached_address],
+                                         memcached_age_time)
+
         _logger.debug("Memcached database-cache initialised")
 
     def _reinitialise(self):
         pass
 
     def _lookupMAC(self, mac):
-        data = self.mc_client.get(str(mac))
-        if data:
-            (ip, hostname, extra, subnet_id) = data
-            subnet_str = self._create_subnet_key(subnet_id)
-            details = self.mc_client.get(subnet_str)
-            if details:
-                return Definition(
-                 ip=ip, lease_time=details[6], subnet=subnet_id[0], serial=subnet_id[1],
-                 hostname=hostname,
-                 gateways=details[0], subnet_mask=details[1], broadcast_address=details[2],
-                 domain_name=details[3], domain_name_servers=details[4], ntp_servers=details[5],
-                 extra=extra
-                )
-        return None
+        return self.mc_client.lookupMAC(mac)
 
-    def _cacheMAC(self, mac, definition, chained):
-        subnet_id = (definition.subnet, definition.serial)
-        subnet_str = self._create_subnet_key(subnet_id)
-        self.mc_client.set(
-         str(mac),
-         (definition.ip, definition.hostname, definition.extra, subnet_id),
-         self.memcached_age_time
-        )
-        self.mc_client.set(
-         subnet_str,
-         (
-          definition.gateways, definition.subnet_mask, definition.broadcast_address,
-          definition.domain_name, definition.domain_name_servers, definition.ntp_servers,
-          definition.lease_time
-         ),
-         self.memcached_age_time
-        )
-
-    def _create_subnet_key(self, subnet_id):
-        return "%s-%i" % (subnet_id[0].replace(" ", "_"), subnet_id[1])
+    def _cacheMAC(self, mac, definitions, chained):
+        self.mc_client.cacheMAC(mac, definitions)
 
 class DiskCache(_DatabaseCache):
     _filepath = None #: The path to which the persistent file will be written
@@ -334,6 +308,8 @@ LIMIT 1""", (int(mac),))
         return None
 
     def _cacheMAC(self, mac, definition, chained):
+        if isinstance(definition, (list,tuple)):
+           raise Exception('DiskCache does not currently support caching mutilple definitions at once')
         (database, cursor) = self._connect()
         cursor.execute("INSERT OR IGNORE INTO subnets (subnet, serial, lease_time, gateway, subnet_mask, broadcast_address, ntp_servers, domain_name_servers, domain_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
          (
