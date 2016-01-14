@@ -22,12 +22,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (C) Neil Tallim, 2014 <flan@uguu.ca>
 """
-import pickle
+import cPickle as pickle
 import json
 import logging
 import threading
 
 from generic import (Database, Definition)
+
+
 
 _logger = logging.getLogger('databases._caching')
 
