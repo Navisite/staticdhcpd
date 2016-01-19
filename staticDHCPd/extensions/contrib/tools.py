@@ -4,6 +4,9 @@ Additional tools for processing DHCP requests
 
 Copyright 2016 NaviSite Inc. - A Time Warner Cable Company
 """
+import logging
+
+_logger = logging.getLogger('tools')
 
 def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
                                ip, giaddr, pxe_options):
@@ -38,4 +41,5 @@ def filterRetrievedDefinitions(definitions, packet, packet_type, mac,
             if giaddr.isSubnetMember(definition.ip, definition.subnet_mask):
                return definition
     else:
+        _logger.debug("No match found in filtering.")
         return None

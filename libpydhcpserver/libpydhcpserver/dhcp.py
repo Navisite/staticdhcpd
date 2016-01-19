@@ -62,6 +62,11 @@ An inet layer-3 address.
     A numeric port value.
 """
 
+try: #see if Python was built against a specific platform
+        _SO_BINDTODEVICE = socket.SO_BINDTODEVICE
+except AttributeError: #Fall back to the common value
+    _SO_BINDTODEVICE = 25
+
 class DHCPServer(object):
     """
     Handles internal packet-path-routing logic.
@@ -296,11 +301,12 @@ class _NetworkLink(object):
             dhcp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             if listen_interface:
                 try:
-                    dhcp_socket.setsockopt(socket.SOL_SOCKET, 25, listen_interface)
+                    dhcp_socket.setsockopt(socket.SOL_SOCKET, _SO_BINDTODEVICE, listen_interface)
                 except socket.error, msg:
-                    raise Exception('Unable to listen only on %(listen_interface)s: %(err)s' % {
+                    raise OSError(msg.errno, 'Unable to listen only on %(listen_interface)s: %(err)s' % {
                      'listen_interface': listen_interface,
-                     'err': str(msg)})
+                     'err': msg.strerror,
+                    })
             if pxe_port:
                 pxe_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         except socket.error, msg:
