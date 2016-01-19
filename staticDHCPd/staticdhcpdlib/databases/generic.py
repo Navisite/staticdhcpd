@@ -235,7 +235,7 @@ class CachingDatabase(Database):
             if config.CACHE_ON_DISK:
                 _logger.warn("CACHE_ON_DISK was set, but USE_CACHE was not")
             if config.MEMCACHED_CACHE:
-                _logger.warn("CACHE_ON_DISK was set, but USE_CACHE was not")
+                _logger.warn("MEMCACHED_CACHE was set, but USE_CACHE was not")
 
     def reinitialise(self):
         if self._cache:
